@@ -1,0 +1,17 @@
+{
+  "name": "discord-reminder",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "build": "node commands.js"
+  },
+  "author": "Filip Polak",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "chrono-node": "^2.8.3",
+    "discord.js": "^14.21.0",
+    "sqlite3": "^5.1.7"
+  }
+}
