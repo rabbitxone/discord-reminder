@@ -27,8 +27,7 @@ const db = new sqlite3.Database('./reminders.db', (err) => {
         });
 
         db.run(`CREATE TABLE IF NOT EXISTS usertimezones (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
+            user_id TEXT NOT NULL PRIMARY KEY,
             timezone TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -40,18 +39,6 @@ const db = new sqlite3.Database('./reminders.db', (err) => {
     }
 });
 
-// Function to save reminder
-// function saveReminder(message, remindAt) {
-//     const query = `INSERT INTO reminders (message, remind_at) VALUES (?, ?)`;
-//     db.run(query, [message, remindAt], function(err) {
-//         if (err) {
-//             console.error('Error inserting reminder:', err.message);
-//         } else {
-//             console.log(`Reminder saved with ID: ${this.lastID}`);
-//         }
-//     });
-// }
-
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once('ready', () => {
@@ -60,12 +47,70 @@ client.once('ready', () => {
 
 client.on('interactionCreate', async interaction => {
     if(interaction.isAutocomplete()) {
-        const focusedOption = interaction.options.getFocused(true);
-        if(focusedOption.name === 'timezone') {
-            const query = focusedOption.value.toLowerCase();
-            const filteredTimezones = timezones.filter(tz => tz.name.toLowerCase().includes(query));
-            const choices = filteredTimezones.slice(0, 25);
-            await interaction.respond(choices);
+        try {
+            const focusedOption = interaction.options.getFocused(true);
+            if(focusedOption.name === 'timezone') {
+                const query = focusedOption.value.toLowerCase();
+                const filteredTimezones = timezones.filter(tz => tz.name.toLowerCase().includes(query));
+                const choices = filteredTimezones.slice(0, 25);
+                await interaction.respond(choices);
+            } else if(focusedOption.name === 'name') {
+                // Message of the user's reminder that is going to be deleted
+                const userId = interaction.user.id;
+                const query = focusedOption.value.toLowerCase();
+                db.all(`SELECT message, remind_at FROM reminders WHERE user_id = ? AND message LIKE ?`, [userId, `%${query}%`], async (err, rows) => {
+                    if (err) {
+                        console.error('Error fetching reminders:', err.message);
+                        return interaction.respond([]);
+                    }
+                    
+                    const pluralize = (number, form1, form2, form5) => {
+                        if (number === 1) {
+                            return form1;
+                        } else if (number % 10 >= 2 && number % 10 <= 4 && (number % 100 < 10 || number % 100 >= 20)) {
+                            return form2;
+                        } else {
+                            return form5;
+                        }
+                    };
+
+                    const choices = rows.map(row => {
+                        const remindAt = new Date(row.remind_at);
+                        const now = new Date();
+                        const diff = Math.abs(remindAt - now);
+                        const totalMinutes = Math.floor(diff / (1000 * 60));
+                        
+                        let timeString = '';
+                        if (interaction.locale.startsWith('pl')) {
+                            const days = Math.floor(totalMinutes / 1440);
+                            const remainingMinutes = totalMinutes % 1440;
+                            const hours = Math.floor(remainingMinutes / 60);
+                            const minutes = remainingMinutes % 60;
+
+                            if (days > 0) timeString += `${days} ${pluralize(days, "dzień", "dni", "dni")} `;
+                            if (hours > 0) timeString += `${hours} ${pluralize(hours, "godzina", "godziny", "godzin")} `;
+                            if (minutes > 0) timeString += `${minutes} ${pluralize(minutes, "minuta", "minuty", "minut")}`;
+                            timeString = `za ${timeString.trim()}`;
+                        } else {
+                            const days = Math.floor(totalMinutes / 1440);
+                            const remainingMinutes = totalMinutes % 1440;
+                            const hours = Math.floor(remainingMinutes / 60);
+                            const minutes = remainingMinutes % 60;
+
+                            if (days > 0) timeString += `${days} day${days > 1 ? 's' : ''} `;
+                            if (hours > 0) timeString += `${hours} hour${hours > 1 ? 's' : ''} `;
+                            if (minutes > 0) timeString += `${minutes} minute${minutes > 1 ? 's' : ''}`;
+                            timeString = `in ${timeString.trim()}`;
+                        }
+
+                        return { name: `${row.message} (${timeString})`, value: row.id.toString() };
+                    });
+
+                    await interaction.respond(choices.slice(0, 25));
+                });
+            }
+        } catch (err) {
+            console.error('Autocomplete interaction error:', err);
         }
         return;
     }
@@ -74,6 +119,7 @@ client.on('interactionCreate', async interaction => {
 
     const { commandName } = interaction;
     if(commandName === 'remind') {
+        await interaction.deferReply({ flags: 1 << 6 });
 
         const message = interaction.options.getString('message');
         const when = interaction.options.getString('when');
@@ -100,41 +146,152 @@ client.on('interactionCreate', async interaction => {
             else remindAt = chrono.en.parseDate(when);
 
             if (!remindAt) {
-                if(locale === 'pl') await interaction.reply({ content: 'Nie udało się poprawnie odczytać podanej daty. Spróbuj ponownie używając innych wyrazów lub podając dokładną datę i godzinę.', flags: 1 << 6 });
-                else await interaction.reply({ content: 'Failed to parse the date. Please try again with different words or by providing an exact date and time.', flags: 1 << 6 });
+                if(locale === 'pl') {
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(15277667)
+                            .setTitle('❌ Błąd w przetwarzaniu daty')
+                            .setDescription('Nie udało się poprawnie odczytać podanej daty. Spróbuj ponownie używając innych wyrazów lub podając dokładną datę i godzinę.')
+                    ]
+                    await interaction.reply({ embeds: embed });
+                } else {
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(15277667)
+                            .setTitle('❌ Error processing date')
+                            .setDescription('Failed to parse the provided date. Please try again using different words or by specifying the exact date and time.')
+                    ]
+                    await interaction.reply({ embeds: embed });
+                }
                 return;
             }
 
-            const utcDate = new Date(remindAt.getTime() - remindAt.getTimezoneOffset() * 60000);
-            const userDateStr = utcDate.toLocaleString('en-US', { timeZone: userTimezone });
-            const userDate = new Date(userDateStr);
+            const userDate = new Date(
+                remindAt.toLocaleString('en-US', { timeZone: userTimezone })
+            );
+            console.log('remindAt:', remindAt, '//', userTimezone, '=>', userDate);
 
             const timestamp = Math.floor(userDate.getTime() / 1000); // Unix timestamp
             const query = `INSERT INTO reminders (user_id, message, remind_at, channel) VALUES (?, ?, ?, ?)`;
-            db.run(query, [userId, message, userDate.toISOString(), channel], function (err) {
+            db.run(query, [userId, message, userDate.toISOString(), channel], async function (err) {
                 if (err) {
-                console.error('Error inserting reminder:', err.message);
-                if(locale === 'pl') interaction.reply({ content: 'Nie udało się zapisać przypomnienia. Spróbuj ponownie później.', flags: 1 << 6 });
-                else interaction.reply({ content: 'Failed to save the reminder. Please try again later.', flags: 1 << 6 });
-                } else {
-                let replyMsg;
-                if(locale === 'pl') {
-                    replyMsg = `Przypomnienie zapisane! Przypomnę Ci o ${userDate.toLocaleString('pl-PL', { timeZone: userTimezone })} (${userTimezone}).`;
-                    if (usedDefaultTimezone) {
-                    replyMsg += `\n:warning: Użyto domyślnej strefy czasowej, \`UTC\`. Aby ustawić własną strefę czasową, użyj komendy \`/settimezone\`.`;
+                    console.error('Error inserting reminder:', err.message);
+                    
+                    if(locale === 'pl') {
+                        const embed = [
+                            new EmbedBuilder()
+                                .setColor(15277667)
+                                .setTitle('❌ Nie udało się zapisać przypomnienia')
+                                .setDescription('Zapisywanie przypomnienia nie powiodło się. Być może wystąpił błąd komunikacji z bazą danych. Spróbuj ponownie później.')
+                        ]
+                        await interaction.reply({ embeds: embed });
+                    } else {
+                        const embed = [
+                            new EmbedBuilder()
+                                .setColor(15277667)
+                                .setTitle('❌ Failed to save the reminder')
+                                .setDescription('Saving reminder hasn\'t completed successfully. There might be a database connection issue. Please try again later.')
+                        ]
+                        await interaction.reply({ embeds: embed });
                     }
                 } else {
-                    replyMsg = `Reminder saved! I'll remind you on <t:${timestamp}> (${userTimezone}).`;
-                    if (usedDefaultTimezone) {
-                    replyMsg += `\n:warning: Used default timezone, \`UTC\`. To set your own timezone, use the \`/settimezone\` command.`;
+                    let title, description, warning;
+                    if(locale === 'pl') {
+                        title = `✅ Przypomnienie zapisane`;
+                        description = `Przypomnę Ci ${userDate.toLocaleString('pl-PL', { timeZone: userTimezone })}`;
+                        if (usedDefaultTimezone) {
+                            warning = `:warning: Użyto domyślnej strefy czasowej, \`UTC\`. Aby ustawić własną strefę czasową, użyj komendy \`/settimezone\`.`;
+                        }
+                    } else {
+                        title = `✅ Reminder saved`;
+                        description = `I'll remind you on <t:${timestamp}>`;
+                        if (usedDefaultTimezone) {
+                            warning = `\n:warning: Used default timezone, \`UTC\`. To set your own timezone, use the \`/settimezone\` command.`;
+                        }
                     }
-                }
-                interaction.reply({ content: replyMsg, flags: 1 << 6 });
+
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(1752220)
+                            .setTitle(title)
+                            .setDescription(description)
+                    ];
+                    if (warning) {
+                        embed[0].setFooter({ text: warning });
+                    }
+
+                    await interaction.editReply({ embeds: embed });
                 }
             });
         });
 
+    } else if(commandName === 'deletereminder') {
+        await interaction.deferReply({ flags: 1 << 6 });
+
+        const reminderId = interaction.options.getString('name');
+        const userId = interaction.user.id;
+        const locale = interaction.locale && interaction.locale.startsWith('pl') ? 'pl' : 'en';
+
+        db.run(`DELETE FROM reminders WHERE id = ? AND user_id = ?`, [reminderId, userId], async function(err) {
+            if (err) {
+                console.error('Error deleting reminder:', err.message);
+                if(locale === 'pl') {
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(15277667)
+                            .setTitle('❌ Nie udało się usunąć przypomnienia')
+                            .setDescription('Usuwanie przypomnienia nie powiodło się. Być może wystąpił problem z połączeniem z bazą danych. Spróbuj ponownie później.')
+                    ]
+                    await interaction.editReply({ embeds: embed });
+                } else { 
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(15277667)
+                            .setTitle('❌ Failed to delete reminder')
+                            .setDescription('Deleting reminder hasn\'t completed successfully. There might be a database connection issue. Please try again later.')
+                    ]
+                    await interaction.editReply({ embeds: embed });
+                }
+            } else if (this.changes === 0) {
+                if(locale === 'pl') {
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(15277667)
+                            .setTitle('❌ Nie udało się usunąć przypomnienia')
+                            .setDescription('Nie znaleziono przypomnienia o podanej nazwie. Upewnij się, że podana nazwa przypomnienia jest poprawna.')
+                    ]
+                    await interaction.editReply({ embeds: embed });
+                } else {
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(15277667)
+                            .setTitle('❌ Failed to delete reminder')
+                            .setDescription('No reminder found with the provided name. Please ensure that the reminder name is correct.')
+                    ]
+                    await interaction.editReply({ embeds: embed });
+                }
+            } else {
+                if(locale === 'pl') {
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(1752220)
+                            .setTitle('✅ Przypomnienie usunięte')
+                    ]
+                    await interaction.editReply({ embeds: embed });
+                } else {
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(1752220)
+                            .setTitle('✅ Reminder deleted')
+                    ]
+                    await interaction.editReply({ embeds: embed });
+                }
+            }
+        });
+
     } else if(commandName === 'settimezone') {
+        await interaction.deferReply({ flags: 1 << 6 });
+
         const timezone = interaction.options.getString('timezone');
         const userId = interaction.user.id;
         const locale = interaction.locale && interaction.locale.startsWith('pl') ? 'pl' : 'en';
@@ -142,8 +299,23 @@ client.on('interactionCreate', async interaction => {
         // Check if the timezone is valid
         const isValidTimezone = timezones.some(tz => tz.value === timezone);
         if (!isValidTimezone) {
-            if(locale === 'pl') await interaction.reply({ content: 'Nieprawidłowa strefa czasowa. Wybierz jedną z dostępnych stref.', flags: 1 << 6 });
-            else await interaction.reply({ content: 'Invalid timezone. Please choose a valid timezone.', flags: 1 << 6 });
+            if(locale === 'pl') {
+                const embed = [
+                    new EmbedBuilder()
+                        .setColor(15277667)
+                        .setTitle('❌ Nieprawidłowa strefa czasowa')
+                        .setDescription('Podana strefa czasowa jest nieprawidłowa. Użyj komendy `/settimezone` i wybierz jedną z dostępnych stref czasowych.')
+                ];
+                await interaction.editReply({ embeds: embed });
+            } else {
+                const embed = [
+                    new EmbedBuilder()
+                        .setColor(15277667)
+                        .setTitle('❌ Invalid timezone')
+                        .setDescription('The provided timezone is invalid. Use the `/settimezone` command and select one of the available timezones.')
+                ];
+                await interaction.editReply({ embeds: embed });
+            };
             return;
         }
 
@@ -151,11 +323,41 @@ client.on('interactionCreate', async interaction => {
         db.run(query, [userId, timezone], async function(err) {
             if (err) {
                 console.error('Error inserting timezone:', err.message);
-                if(locale === 'pl') await interaction.reply({ content: 'Nie udało się zapisać twojej strefy czasowej. Spróbuj ponownie później.', flags: 1 << 6 });
-                else await interaction.reply({ content: 'Failed to save your timezone. Please try again later.', flags: 1 << 6 });
+                if(locale === 'pl') {
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(15277667)
+                            .setTitle('❌ Błąd zapisu strefy czasowej')
+                            .setDescription('Zapisywanie strefy czasowej nie powiodło się. Być może wystąpił błąd komunikacji z bazą danych. Spróbuj ponownie później.')
+                    ];
+                    await interaction.editReply({ embeds: embed });
+                } else {
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(15277667)
+                            .setTitle('❌ Error saving timezone')
+                            .setDescription('Saving timezone hasn\'t completed successfully. There might be a database connection issue. Please try again later.')
+                    ];
+                    await interaction.editReply({ embeds: embed });
+                }
             } else {
-                if(locale === 'pl') await interaction.reply({ content: `Twoja strefa czasowa została ustawiona na ${timezone}.`, flags: 1 << 6 });
-                else await interaction.reply({ content: `Your timezone has been set to ${timezone}.`, flags: 1 << 6 });
+                if(locale === 'pl') {
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(1752220)
+                            .setTitle('✅ Strefa czasowa ustawiona')
+                            .setDescription(`Twoja strefa czasowa została ustawiona na **${timezone}**. Nowe przypomnienia będą teraz wysyłane zgodnie z tą strefą czasową, jednak ta zmiana nie wpłynie na już utworzone przypomnienia.`)
+                    ];
+                    await interaction.editReply({ embeds: embed });
+                } else {
+                    const embed = [
+                        new EmbedBuilder()
+                            .setColor(1752220)
+                            .setTitle('✅ Timezone set')
+                            .setDescription(`Your timezone has been set to **${timezone}**. New reminders will now be sent according to this timezone, however, this change will not affect already created reminders.`)
+                    ];
+                    await interaction.editReply({ embeds: embed });
+                }
             }
         });
     }
