@@ -41,6 +41,38 @@ const commands = [
                     'pl': 'Kiedy ci przypomnieć'
                 },
                 required: true
+            },
+            {
+                type: 3, // string
+                name: 'dm',
+                name_localizations: {
+                    'en-US': 'dm',
+                    'pl': 'dm'
+                },
+                description: 'Send the reminder in DMs',
+                description_localizations: {
+                    'en-US': 'Send the reminder in DMs',
+                    'pl': 'Wyślij przypomnienie w wiadomości prywatnej'
+                },
+                required: false,
+                choices: [
+                    {
+                        name: 'Yes',
+                        name_localizations: {
+                            'en-US': 'Yes',
+                            'pl': 'Tak'
+                        },
+                        value: 'true'
+                    },
+                    {
+                        name: 'No',
+                        name_localizations: {
+                            'en-US': 'No',
+                            'pl': 'Nie'
+                        },
+                        value: 'false'
+                    }
+                ]
             }
         ]
     },
@@ -57,10 +89,10 @@ const commands = [
         }
     },
     {
-        name: 'deleteReminder',
+        name: 'deletereminder',
         name_localizations: {
-            'en-US': 'deleteReminder',
-            'pl': 'usunPrzypomnienie'
+            'en-US': 'deletereminder',
+            'pl': 'usunprzypomnienie'
         },
         description: 'Delete a reminder',
         description_localizations: {
@@ -84,17 +116,46 @@ const commands = [
                 autocomplete: true
             }
         ]
+    },
+    {
+        name: 'settimezone',
+        name_localizations: {
+            'en-US': 'settimezone',
+            'pl': 'strefaczasowa'
+        },
+        description: 'Set your timezone for reminders',
+        description_localizations: {
+            'en-US': 'Set your timezone for reminders',
+            'pl': 'Ustaw swoją strefę czasową dla przypomnień'
+        },
+        options: [
+            {
+                type: 3, // string
+                name: 'timezone',
+                name_localizations: {
+                    'en-US': 'timezone',
+                    'pl': 'strefa'
+                },
+                description: 'Your timezone (e.g., America/New_York)',
+                description_localizations: {
+                    'en-US': 'Your timezone (e.g., America/New_York)',
+                    'pl': 'Twoja strefa czasowa (np. Europa/Warszawa)'
+                },
+                required: true,
+                autocomplete: true
+            }
+        ]
     }
-]
+];
 
 const rest = new REST({ version: '10' }).setToken(token);
 
 (async () => {
     try {
         console.log('Registering app commands...');
-        const data = await rest.options(Routes.applicationCommands(clientId), { body: commands });
+        const data = await rest.put(Routes.applicationCommands(clientId), { body: commands });
         console.log(`Successfully registered ${data.length} application commands.`);
     } catch (e) {
         console.error('Error registering application commands:', e);
     }
-})
+})();
