@@ -215,7 +215,6 @@ client.on('interactionCreate', async interaction => {
         const userId = interaction.user.id;
         const locale = interaction.locale.startsWith('pl') ? 'pl' : 'en';
         const channel = interaction.options.getString('dm') === 'true' ? 'U' + interaction.user.id : interaction.channel.id;
-        console.log(channel);
 
         // Get user's timezone from DB
         db.get(
@@ -259,7 +258,6 @@ client.on('interactionCreate', async interaction => {
                 const userDate = new Date(
                     remindAt.toLocaleString('en-US', { timeZone: userTimezone })
                 );
-                console.log('remindAt:', remindAt, '//', userTimezone, '=>', userDate);
 
                 const timestamp = Math.floor(userDate.getTime() / 1000); // Unix timestamp
                 const query = `INSERT INTO reminders (user_id, message, remind_at, channel) VALUES (?, ?, ?, ?)`;
