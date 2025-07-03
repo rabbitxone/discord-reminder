@@ -116,35 +116,6 @@ const commands = [
                 autocomplete: true
             }
         ]
-    },
-    {
-        name: 'settimezone',
-        name_localizations: {
-            'en-US': 'settimezone',
-            'pl': 'strefaczasowa'
-        },
-        description: 'Set your timezone for reminders',
-        description_localizations: {
-            'en-US': 'Set your timezone for reminders',
-            'pl': 'Ustaw swoją strefę czasową dla przypomnień'
-        },
-        options: [
-            {
-                type: 3, // string
-                name: 'timezone',
-                name_localizations: {
-                    'en-US': 'timezone',
-                    'pl': 'strefa'
-                },
-                description: 'Your timezone (e.g., America/New_York)',
-                description_localizations: {
-                    'en-US': 'Your timezone (e.g., America/New_York)',
-                    'pl': 'Twoja strefa czasowa (np. Europa/Warszawa)'
-                },
-                required: true,
-                autocomplete: true
-            }
-        ]
     }
 ];
 
