@@ -59,7 +59,7 @@ client.on('interactionCreate', async interaction => {
                 // Message of the user's reminder that is going to be deleted
                 const userId = interaction.user.id;
                 const query = focusedOption.value.toLowerCase();
-                db.all(`SELECT message, remind_at FROM reminders WHERE user_id = ? AND message LIKE ?`, [userId, `%${query}%`], async (err, rows) => {
+                db.all(`SELECT message, remind_at, id FROM reminders WHERE user_id = ? AND message LIKE ?`, [userId, `%${query}%`], async (err, rows) => {
                     if (err) {
                         console.error('Error fetching reminders:', err.message);
                         return interaction.respond([]);
@@ -386,7 +386,7 @@ client.on('interactionCreate', async interaction => {
         const userId = interaction.user.id;
         const locale = interaction.locale && interaction.locale.startsWith('pl') ? 'pl' : 'en';
         // Get reminders list for the user from db
-        db.all(`SELECT id, message, remind_at, channel, created_at, sent FROM reminders WHERE user_id = ?`, [userId], async (err, rows) => {
+        db.all(`SELECT id, message, remind_at, channel, created_at, sent FROM reminders WHERE user_id = ? AND sent = 0`, [userId], async (err, rows) => {
             if (err) {
                 console.error('Error fetching reminders:', err.message);
                 if (locale === 'pl') {
@@ -568,37 +568,6 @@ client.on('interactionCreate', async interaction => {
         });
     }
 });
-
-// For test purposes, send a message to the channel when the bot is ready
-// client.once('ready', () => {
-//     client.channels.fetch('764071979854069800')
-//         .then(channel => {
-//             if (channel.isTextBased()) {
-//                 channel.send('Hello!')
-//                     .then(message => {
-//                         setTimeout(() => {
-//                             message.delete().catch(err => console.error('Error deleting message:', err.message));
-//                         }, 10000); // Delete the message after 10 seconds
-//                     });
-//             }
-//         })
-//         .catch(err => console.error('Error fetching channel:', err.message));
-// });
-
-// For test purposes, send a message to the user's DM when the bot is ready
-// client.once('ready', () => {
-//     const userId = '764071979854069800'; // Replace with the actual user ID
-//     client.users.fetch(userId)
-//         .then(user => {
-//             user.send('Hello!')
-//                 .then(message => {
-//                     setTimeout(() => {
-//                         message.delete().catch(err => console.error('Error deleting message:', err.message));
-//                     }, 10000); // Delete the message after 10 seconds
-//                 });
-//         })
-//         .catch(err => console.error('Error fetching user:', err.message));
-// });
 
 cron.schedule('*/1 * * * *', () => {
     const now = new Date();
